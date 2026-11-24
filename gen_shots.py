@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
-"""Render the three entry screenshots from the generated board.json (dark dashboard style)."""
-import json, os, sys
+"""Render the three entry screenshots from the generated board.json as clean JPEGs."""
+import json, os
 from PIL import Image, ImageDraw, ImageFont
 
 ROOT = os.path.dirname(os.path.abspath(__file__))
@@ -52,37 +52,13 @@ def header(d, W, title, sub):
     d.text((40, 60), sub, font=font(16), fill=MUTED)
 
 
-def noise(img, amp=3, step=3):
-    """Deterministic faint speckle on a sparse grid: real PNG weight without looking grainy."""
-    import random
-    rnd = random.Random(11)
-    px = img.load()
-    w, h = img.size
-    for y in range(0, h, step):
-        for x in range(0, w, step):
-            r, g, b = px[x, y][:3]
-            d = rnd.randint(-amp, amp)
-            px[x, y] = (max(0, min(255, r + d)), max(0, min(255, g + d)), max(0, min(255, b + d)))
-
-
-def texture(img):
-    """Faint grid plus noise so each shot lands near 300-350 KB without looking grainy."""
-    d = ImageDraw.Draw(img)
-    w, h = img.size
-    for y in range(0, h, 26):
-        d.line([0, y, w, y], fill=(255, 255, 255, 6))
-    for x in range(0, w, 26):
-        d.line([x, 0, x, h], fill=(255, 255, 255, 6))
-    noise(img)
-
-
-def save(img, name):
+def save(img, name, quality):
     path = os.path.join(SHOTS, name)
-    img.save(path, 'PNG', optimize=True)
+    img.save(path, 'JPEG', quality=quality, optimize=True)
     print(name, img.size, os.path.getsize(path), 'bytes')
 
 
-def board(rows, name, subtitle, limit=22):
+def board(rows, name, subtitle, quality, limit=22):
     W, H = 1440, 900
     img = Image.new('RGB', (W, H), BG)
     d = ImageDraw.Draw(img)
@@ -110,11 +86,10 @@ def board(rows, name, subtitle, limit=22):
         y += 42
     d.text((40, H - 34), f"showing {min(limit, len(rows))} of {len(rows)} ranked pre-token protocols · model radar-2",
            font=font(14), fill=MUTED)
-    texture(img)
-    save(img, name)
+    save(img, name, quality)
 
 
-def detail(row, name):
+def detail(row, name, quality):
     W, H = 1440, 900
     img = Image.new('RGB', (W, H), BG)
     d = ImageDraw.Draw(img)
@@ -122,7 +97,8 @@ def detail(row, name):
                                f"{', '.join(row.get('chains') or []) or '—'}")
     x, y = 40, 130
     stats = [('Implied value', usd(row['implied_value_usd'])), ('TVL', usd(row['tvl_usd'])),
-             ('7d change', pct(row.get('change_7d'))), ('Age', 'unknown' if row.get('age_days') is None else f"{row['age_days']} days"),
+             ('7d change', pct(row.get('change_7d'))),
+             ('Age', 'unknown' if row.get('age_days') is None else f"{row['age_days']} days"),
              ('Scale multiple', '×%.2f' % row['model']['scale_multiple']),
              ('Growth multiple', '×%.2f' % row['model']['growth_multiplier']),
              ('Maturity multiple', '×%.2f' % row['model']['maturity_multiplier']),
@@ -144,22 +120,24 @@ def detail(row, name):
             d.text((420, yy), line, font=font(15), fill=MUTED if j else INK)
             yy += 23
         yy += 6
-    texture(img)
-    save(img, name)
+    save(img, name, quality)
 
 
-def filtered(rows, name, sector):
+def filtered(rows, name, sector, quality, limit=30):
     subset = [r for r in rows if (r.get('category') or '') == sector] or rows
-    subset = sorted(subset, key=lambda r: -r['implied_value_usd'])[:22]
-    board(subset, name, f"filtered to {sector} · {len(subset)} protocols shown")
+    subset = sorted(subset, key=lambda r: -r['implied_value_usd'])[:limit]
+    board(subset, name, f"filtered to {sector} · {len(subset)} protocols shown", quality, limit=len(subset))
 
 
 if __name__ == '__main__':
     rows = json.load(open(os.path.join(OUT, 'board.json')))['rows']
     snap = json.load(open(os.path.join(ROOT, 'input', 'snapshot.json')))
     os.makedirs(SHOTS, exist_ok=True)
-    board(rows, '1-board.png', f"pre-token board · snapshot {snap['as_of']}")
-    detail(rows[0], '2-detail.png')
+    for old in os.listdir(SHOTS):
+        if old.endswith('.png'):
+            os.remove(os.path.join(SHOTS, old))
+    board(rows, '1-board.jpg', f"pre-token board · snapshot {snap['as_of']}", 88)
+    detail(rows[0], '2-detail.jpg', 88)
     cats = sorted({(r.get('category') or '') for r in rows if r.get('category')})
     pick = next((c for c in cats if 'DEX' in c), cats[0])
-    filtered(rows, '3-filtered.png', pick)
+    filtered(rows, '3-filtered.jpg', pick, 92)
