@@ -1,0 +1,54 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Token Launch Radar — pre-token board</title>
+<link rel="stylesheet" href="app.css">
+</head>
+<body>
+<header class="top">
+  <div class="brand">
+    <h1>Token Launch Radar</h1>
+    <p class="sub">Protocols with no token yet, ranked by an implied value from their own on-chain record.</p>
+  </div>
+  <dl class="stats" id="stats"></dl>
+</header>
+
+<nav class="tabs">
+  <button class="tab active" data-tab="board">Pre-token board</button>
+  <button class="tab" data-tab="live">Live tokens</button>
+</nav>
+
+<section class="panel" id="controls">
+  <input id="q" type="search" placeholder="Filter by name, slug or chain" aria-label="filter">
+  <select id="sector" aria-label="sector"></select>
+  <select id="sort" aria-label="sort">
+    <option value="rank">Sort: rank</option>
+    <option value="implied_value_usd">Sort: implied value</option>
+    <option value="tvl_usd">Sort: TVL</option>
+    <option value="change_7d">Sort: 7d change</option>
+    <option value="age_days">Sort: age</option>
+  </select>
+  <label class="check"><input type="checkbox" id="only-watch"> watchlist only</label>
+  <span class="count" id="count"></span>
+</section>
+
+<main>
+  <div class="scroller">
+    <table id="grid">
+      <thead><tr>
+        <th>#</th><th class="l">Protocol</th><th>Sector</th><th>Chains</th>
+        <th class="r">TVL</th><th class="r">7d</th><th class="r">Age</th><th class="r">Implied value</th>
+      </tr></thead>
+      <tbody></tbody>
+    </table>
+  </div>
+  <aside class="detail" id="detail"><p class="muted">Pick a row to read its value model and farm plan.</p></aside>
+</main>
+
+<footer class="foot" id="foot"></footer>
+<script src="../data.js"></script>
+<script src="app.js"></script>
+</body>
+</html>
