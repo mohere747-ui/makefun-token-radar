@@ -131,7 +131,10 @@ def filtered(rows, name, sector, quality, limit=30):
 
 if __name__ == '__main__':
     rows = json.load(open(os.path.join(OUT, 'board.json')))['rows']
-    snap = json.load(open(os.path.join(ROOT, 'input', 'snapshot.json')))
+    snap_path = os.path.join(ROOT, '..', 'inputs', 'snapshot.json')
+    if not os.path.exists(snap_path):
+        snap_path = os.path.join(ROOT, 'input', 'snapshot.json')
+    snap = json.load(open(snap_path))
     os.makedirs(SHOTS, exist_ok=True)
     for old in os.listdir(SHOTS):
         if old.endswith('.png'):

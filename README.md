@@ -10,8 +10,10 @@ A token launch radar: every protocol in the sealed snapshot that records no toke
 
 ```sh
 mkdir -p out
-MAKEFUN_OUTPUT_DIR=$PWD/out node main.ts --input input/snapshot.json
+MAKEFUN_OUTPUT_DIR=$PWD/out node main.ts --input /input/snapshot.json
 ```
+
+In the grader the sealed snapshot is mounted at `/input`; outside it, pass `--input <snapshot.json>`.
 
 Outputs land in `out/`: `board.json` (the ranked board), `data.js`, `dashboard/` and `screenshots/` copied in,
 and `dossier.json` rebuilt by the vendored library.
