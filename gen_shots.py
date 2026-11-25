@@ -6,6 +6,8 @@ from PIL import Image, ImageDraw, ImageFont
 ROOT = os.path.dirname(os.path.abspath(__file__))
 OUT = os.path.join(ROOT, 'out')
 SHOTS = os.path.join(ROOT, 'screenshots')
+MODEL_INFO = None
+MODEL_VERSION = 'radar-3-fitted'
 
 BG = (11, 15, 20); PANEL = (18, 25, 34); LINE = (31, 42, 55)
 INK = (230, 237, 243); MUTED = (139, 155, 176); ACCENT = (57, 208, 255)
@@ -84,7 +86,12 @@ def board(rows, name, subtitle, quality, limit=22):
         d.rounded_rectangle([cols[7] + 120, y + 4, cols[7] + 120 + barw, y + 18], 4, fill=ACCENT)
         d.line([32, y + 30, W - 32, y + 30], fill=(22, 32, 43))
         y += 42
-    d.text((40, H - 34), f"showing {min(limit, len(rows))} of {len(rows)} ranked pre-token protocols · model radar-2",
+    note = ''
+    if MODEL_INFO:
+        v, c = MODEL_INFO['validation'], MODEL_INFO['coverage']
+        note = (f" · fitted on {v['labelled']} labels · LOO {v['loo_mae_log10']} / WF {v['walk_mae_log10']}"
+                f" · {c['protocols_total']} protocols covered")
+    d.text((40, H - 34), f"showing {min(limit, len(rows))} of {len(rows)} ranked pre-token protocols · {MODEL_VERSION}{note}",
            font=font(14), fill=MUTED)
     save(img, name, quality)
 
@@ -99,10 +106,10 @@ def detail(row, name, quality):
     stats = [('Implied value', usd(row['implied_value_usd'])), ('TVL', usd(row['tvl_usd'])),
              ('7d change', pct(row.get('change_7d'))),
              ('Age', 'unknown' if row.get('age_days') is None else f"{row['age_days']} days"),
-             ('Scale multiple', '×%.2f' % row['model']['scale_multiple']),
-             ('Growth multiple', '×%.2f' % row['model']['growth_multiplier']),
-             ('Maturity multiple', '×%.2f' % row['model']['maturity_multiplier']),
-             ('Sector multiple', '×%.2f' % row['model'].get('sector_multiplier', 1))]
+             ('Min. capital', usd(row.get('cost_usd') or 0)),
+             ('Hold', f"{row.get('hours') or 0}h"),
+             ('Cost / hour', "$%.2f" % (row.get('cost_per_hour_usd') or 0)),
+             ('Fitted log10', '%.3f' % ((row.get('evidence') or {}).get('predicted_log10_mcap') or 0))]
     for k, v in stats:
         d.rounded_rectangle([x, y, x + 330, y + 54], 8, fill=PANEL)
         d.text((x + 14, y + 8), k, font=font(13), fill=MUTED)
@@ -131,6 +138,10 @@ def filtered(rows, name, sector, quality, limit=30):
 
 if __name__ == '__main__':
     rows = json.load(open(os.path.join(OUT, 'board.json')))['rows']
+    data_js = open(os.path.join(OUT, 'data.js')).read()
+    radar = json.loads(data_js[len('window.RADAR='):-2])
+    MODEL_INFO = {'validation': radar['validation'], 'coverage': radar['coverage']}
+    MODEL_VERSION = radar['model_version']
     snap_path = os.path.join(ROOT, '..', 'inputs', 'snapshot.json')
     if not os.path.exists(snap_path):
         snap_path = os.path.join(ROOT, 'input', 'snapshot.json')

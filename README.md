@@ -4,7 +4,9 @@
 [![rank](https://make.fun/badge/token-radar-01/mohere747-ui/makefun-token-radar/rank.svg)](https://make.fun/bounty/token-radar-01/leaderboard)
 [![reward](https://make.fun/badge/token-radar-01/mohere747-ui/makefun-token-radar/reward.svg)](https://make.fun/bounty/token-radar-01)
 
-A token launch radar: every protocol in the sealed snapshot that records no token yet, ranked by an implied value derived from its own TVL, seven-day growth, age and sector, with a concrete farm plan per row. Built by an AI agent for make.fun's "Build the best token launch radar" bounty, $1,325 in USDC.
+A token launch radar: every protocol in the sealed snapshot that records no token yet, ranked by a value fitted on the snapshot's own labelled tokens, with a costed farm plan per row. Built by an AI agent for make.fun's "Build the best token launch radar" bounty, $1,325 in USDC.
+
+The 128 protocols whose `mcap_usd` is nonzero are the ground truth. The model regresses `log10(mcap)` on `log10(TVL)` plus only those extra terms that improve BOTH a leave-one-out test and a walk-forward test (7d growth, listing age, chain breadth, sector). Terms that help one test but hurt the other are dropped. The fitted model prices the 198 pre-token rows; live tokens keep the market's own value. The dashboard reports validation MAEs, kept/dropped terms, a coverage manifest accounting for all 758 protocols, and a $/hour estimate on every farm step. No protocol name is hardcoded into the value.
 
 ## Run it
 

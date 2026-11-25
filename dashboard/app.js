@@ -15,19 +15,23 @@ let tab = 'board';
 let selSlug = null;
 
 function init() {
-  const m = R.model;
+  const v = R.validation, c = R.coverage;
   $('stats').innerHTML = [
-    ['as of', R.as_of], ['board rows', R.board_size],
-    ['watchlist', R.watchlist_size], ['early finds', R.early_size],
+    ['as of', R.as_of], ['board', `${R.board_size} pre-token`],
+    ['watchlist', `${c.watchlist_on_board}/${c.watchlist_count}`],
+    ['live ledger', `${c.live_count} trading`],
+    ['all protocols', `${c.protocols_total} accounted`],
     ['model', R.model_version],
-  ].map(([k, v]) => `<div><dt>${k}</dt><dd>${esc(v)}</dd></div>`).join('');
+    ['held-out log10 MAE', `${v.loo_mae_log10} / ${v.walk_mae_log10}`],
+  ].map(([k, value]) => `<div><dt>${k}</dt><dd>${esc(value)}</dd></div>`).join('');
   const sectors = [...new Set(R.rows.map((r) => r.category || 'Uncategorized'))].sort();
   $('sector').innerHTML = `<option value="">All sectors</option>`
     + sectors.map((s) => `<option value="${esc(s)}">${esc(s)}</option>`).join('');
   $('foot').innerHTML =
-    `<span>floor: ${fmtUSD(R.floor_usd)} TVL · watchlist is the floor, not the ceiling</span>`
-    + `<span>growth weight up ×${m.growth_weight_up}, down ×${m.growth_weight_down} · maturity ${m.maturity_floor}–${(m.maturity_floor + m.maturity_range).toFixed(2)}</span>`
-    + `<span>source: ${esc(R.source)}</span>`;
+    `<span>coverage: ${c.board_count} board + ${c.live_count} live + ${c.excluded_count} excluded = ${c.protocols_total} protocols</span>`
+    + `<span>fitted on ${v.labelled} labelled tokens · log10 TVL + ${v.kept_terms.join(', ') || 'no extra terms'}; dropped ${v.dropped_terms.join(', ') || 'none'} after two blind tests</span>`
+    + `<span>MAE: baseline ${v.baseline_mae_log10} → leave-one-out ${v.loo_mae_log10}, walk-forward ${v.walk_mae_log10}</span>`
+    + `<span>${esc(v.method)} · source: ${esc(R.source)}</span>`;
   for (const b of document.querySelectorAll('.tab')) b.addEventListener('click', () => {
     tab = b.dataset.tab;
     document.querySelectorAll('.tab').forEach((x) => x.classList.toggle('active', x === b));
@@ -58,6 +62,7 @@ function filtered() {
 
 function render() {
   if (tab === 'live') return renderLive();
+  if (tab === 'coverage') return renderCoverage();
   const rows = filtered();
   $('count').textContent = `${rows.length} of ${R.rows.length} rows`;
   const max = Math.max(...rows.map((r) => r.implied_value_usd), 1);
@@ -96,9 +101,9 @@ function showDetail(slug) {
       <dt>TVL</dt><dd>${fmtUSD(r.tvl_usd)}</dd>
       <dt>7d change</dt><dd>${fmtPct(r.change_7d)}</dd>
       <dt>age (listed)</dt><dd>${r.age_days === null ? 'unknown' : r.age_days + ' days'}</dd>
-      <dt>scale multiple</dt><dd>×${r.scale_multiple}</dd>
-      <dt>growth multiple</dt><dd>×${r.growth_multiplier}</dd>
-      <dt>maturity multiple</dt><dd>×${r.maturity_multiplier}</dd>
+      <dt>minimum capital</dt><dd>${fmtUSD(r.cost_usd)}</dd>
+      <dt>hold</dt><dd>${r.hours} hours</dd>
+      <dt>cost per hour</dt><dd>$${r.cost_per_hour_usd.toFixed(2)}</dd>
     </dl>
     <p>${esc(r.rationale)}</p>
     ${liveNote}
@@ -119,6 +124,29 @@ function renderLive() {
     <td class="r ${l.change_7d === null ? 'flat' : l.change_7d > 0.5 ? 'up' : l.change_7d < -0.5 ? 'down' : 'flat'}">${fmtPct(l.change_7d)}</td>
     <td class="r">listed</td>
     <td class="r iv">${fmtUSD(l.mcap_usd)}</td>
+  </tr>`).join('');
+  for (const tr of body.querySelectorAll('tr')) tr.style.cursor = 'default';
+}
+
+function renderCoverage() {
+  const c = R.coverage;
+  $('count').textContent = `${c.protocols_total} protocols: every slug classified once`;
+  $('detail').innerHTML = `<h2>Coverage manifest</h2>
+    <p class="muted">The board ranks only pre-token protocols. Live tokens and derived products are held in separate ledgers so none of the 758 snapshot rows is silently dropped.</p>
+    <dl class="model">
+      <dt>board (pre-token)</dt><dd>${c.board_count}</dd>
+      <dt>watchlist on board</dt><dd>${c.watchlist_on_board}/${c.watchlist_count}</dd>
+      <dt>live token ledger</dt><dd>${c.live_count}</dd>
+      <dt>excluded with reason</dt><dd>${c.excluded_count}</dd>
+    </dl>
+    <h3>Exclusion reasons</h3>
+    <ol class="steps">${c.excluded_reasons.slice(0, 12).map((x) => `<li>${esc(x.slug)} — ${esc(x.reason)}</li>`).join('')}</ol>`;
+  const body = $('grid').querySelector('tbody');
+  body.innerHTML = c.excluded_reasons.map((x, i) => `<tr>
+    <td class="muted">${i + 1}</td>
+    <td><div class="name">${esc(x.slug)}</div></td>
+    <td colspan="4">${esc(x.reason)}</td>
+    <td class="r">excluded</td>
   </tr>`).join('');
   for (const tr of body.querySelectorAll('tr')) tr.style.cursor = 'default';
 }
