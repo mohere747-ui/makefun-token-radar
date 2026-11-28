@@ -1,154 +1,155 @@
-'use strict';
-const R = window.RADAR;
-const $ = (id) => document.getElementById(id);
-const fmtUSD = (n) => {
-  if (n >= 1e9) return `$${(n / 1e9).toFixed(2)}B`;
-  if (n >= 1e6) return `$${(n / 1e6).toFixed(0)}M`;
-  if (n >= 1e3) return `$${(n / 1e3).toFixed(0)}K`;
-  return `$${n}`;
-};
-const fmtPct = (v) => (v === null ? '—' : `${v > 0 ? '+' : ''}${v.toFixed(1)}%`);
-const esc = (s) => String(s ?? '').replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
+/* Offline dashboard: renders window.RADAR.rows with working controls and a model-check panel. */
+(function () {
+  'use strict';
+  var radar = window.RADAR;
+  var body = document.getElementById('board-body');
+  var detail = document.getElementById('detail');
+  var sortEl = document.getElementById('sort');
+  var sectorEl = document.getElementById('sector');
+  var watchEl = document.getElementById('watchlist');
+  var searchEl = document.getElementById('search');
+  var countEl = document.getElementById('count');
+  var footerEl = document.getElementById('board-footer');
+  var selected = null;
 
-const watch = new Set(R.watchlist || []);
-let tab = 'board';
-let selSlug = null;
+  if (!radar || !Array.isArray(radar.rows)) {
+    body.innerHTML = '<tr><td colspan="8">No radar data found. Run the entrypoint to emit data.js.</td></tr>';
+    return;
+  }
 
-function init() {
-  const v = R.validation, c = R.coverage;
-  $('stats').innerHTML = [
-    ['as of', R.as_of], ['board', `${R.board_size} pre-token`],
-    ['watchlist', `${c.watchlist_on_board}/${c.watchlist_count}`],
-    ['live ledger', `${c.live_count} trading`],
-    ['all protocols', `${c.protocols_total} accounted`],
-    ['model', R.model_version],
-    ['held-out log10 MAE', `${v.loo_mae_log10} / ${v.walk_mae_log10}`],
-  ].map(([k, value]) => `<div><dt>${k}</dt><dd>${esc(value)}</dd></div>`).join('');
-  const sectors = [...new Set(R.rows.map((r) => r.category || 'Uncategorized'))].sort();
-  $('sector').innerHTML = `<option value="">All sectors</option>`
-    + sectors.map((s) => `<option value="${esc(s)}">${esc(s)}</option>`).join('');
-  $('foot').innerHTML =
-    `<span>coverage: ${c.board_count} board + ${c.live_count} live + ${c.excluded_count} excluded = ${c.protocols_total} protocols</span>`
-    + `<span>fitted on ${v.labelled} labelled tokens · log10 TVL + ${v.kept_terms.join(', ') || 'no extra terms'}; dropped ${v.dropped_terms.join(', ') || 'none'} after two blind tests</span>`
-    + `<span>MAE: baseline ${v.baseline_mae_log10} → leave-one-out ${v.loo_mae_log10}, walk-forward ${v.walk_mae_log10}</span>`
-    + `<span>${esc(v.method)} · source: ${esc(R.source)}</span>`;
-  for (const b of document.querySelectorAll('.tab')) b.addEventListener('click', () => {
-    tab = b.dataset.tab;
-    document.querySelectorAll('.tab').forEach((x) => x.classList.toggle('active', x === b));
-    render();
+  document.getElementById('subtitle').textContent =
+    'as of ' + radar.as_of + ' · ' + radar.rows.length + ' ranked pre-token rows · ' +
+    radar.live_size + ' live tokens set aside';
+  document.getElementById('model-badge').textContent = radar.model_version;
+  document.getElementById('asof-badge').textContent = radar.coverage.total + ' protocols in coverage';
+
+  var sectors = [];
+  radar.rows.forEach(function (row) {
+    var s = row.category || 'Unclassified';
+    if (sectors.indexOf(s) === -1) sectors.push(s);
   });
-  $('q').addEventListener('input', render);
-  $('sector').addEventListener('change', render);
-  $('sort').addEventListener('change', render);
-  $('only-watch').addEventListener('change', render);
-  render();
-}
+  sectors.sort();
+  sectors.forEach(function (s) {
+    var option = document.createElement('option');
+    option.value = s === 'Unclassified' ? '' : s;
+    option.textContent = s + ' ▾';
+    sectorEl.appendChild(option);
+  });
 
-function filtered() {
-  const q = $('q').value.trim().toLowerCase();
-  const sec = $('sector').value;
-  const sort = $('sort').value;
-  const onlyWatch = $('only-watch').checked;
-  let rows = R.rows.slice();
-  if (onlyWatch) rows = rows.filter((r) => watch.has(r.slug));
-  if (sec) rows = rows.filter((r) => (r.category || 'Uncategorized') === sec);
-  if (q) rows = rows.filter((r) => (r.name + ' ' + r.slug + ' ' + r.chains.join(' ')).toLowerCase().includes(q));
-  const key = (r) => (r[sort] === null ? -Infinity : r[sort]);
-  rows.sort((a, b) => sort === 'rank'
-    ? a.rank - b.rank
-    : key(b) - key(a) || a.rank - b.rank);
-  return rows;
-}
+  var v = radar.validation;
+  footerEl.textContent =
+    radar.rows.length + ' rows · ' + radar.model_version +
+    ' · LOO ' + v.loo_mae_log10.toFixed(6) +
+    ' · WF ' + v.walk_mae_log10.toFixed(6) +
+    ' · baseline ' + v.baseline_mae_log10.toFixed(6) +
+    ' · coverage ' + radar.coverage.labelled + ' labelled / ' +
+    radar.coverage.excluded + ' excluded';
 
-function render() {
-  if (tab === 'live') return renderLive();
-  if (tab === 'coverage') return renderCoverage();
-  const rows = filtered();
-  $('count').textContent = `${rows.length} of ${R.rows.length} rows`;
-  const max = Math.max(...rows.map((r) => r.implied_value_usd), 1);
-  const body = $('grid').querySelector('tbody');
-  body.innerHTML = rows.map((r) => {
-    const pct = r.change_7d;
-    const cls = pct === null ? 'flat' : pct > 0.5 ? 'up' : pct < -0.5 ? 'down' : 'flat';
-    return `<tr data-slug="${esc(r.slug)}" class="${r.slug === selSlug ? 'sel' : ''}">
-      <td class="muted">${r.rank}</td>
-      <td><div class="name">${esc(r.name)}</div><div class="slug">${esc(r.slug)}</div></td>
-      <td class="sector">${esc(r.category || '—')}</td>
-      <td class="chains">${esc(r.chains.slice(0, 3).join(', ') || '—')}</td>
-      <td class="r">${fmtUSD(r.tvl_usd)}</td>
-      <td class="r ${cls}">${fmtPct(pct)}</td>
-      <td class="r">${r.age_days === null ? '—' : `${r.age_days}d`}</td>
-      <td class="r"><span class="iv">${fmtUSD(r.implied_value_usd)}</span>
-        <span class="bar"><i style="width:${Math.max(2, Math.round(r.implied_value_usd / max * 100))}%"></i></span></td>
-    </tr>`;
-  }).join('');
-  for (const tr of body.querySelectorAll('tr')) tr.addEventListener('click', () => showDetail(tr.dataset.slug));
-  if (selSlug) showDetail(selSlug);
-}
+  function minCapital(tvl) {
+    if (tvl >= 5e9) return 500;
+    if (tvl >= 1e9) return 250;
+    if (tvl >= 1e8) return 100;
+    if (tvl >= 2e7) return 50;
+    return 25;
+  }
 
-function showDetail(slug) {
-  const r = R.rows.find((x) => x.slug === slug);
-  if (!r) return;
-  selSlug = slug;
-  document.querySelectorAll('#grid tbody tr').forEach((tr) => tr.classList.toggle('sel', tr.dataset.slug === slug));
-  const liveNote = R.live.find((l) => l.slug === slug)
-    ? '<p class="tag">market cap: ' + fmtUSD(R.live.find((l) => l.slug === slug).mcap_usd) + '</p>' : '';
-  $('detail').innerHTML = `
-    <h2>${esc(r.name)}</h2>
-    <div class="meta">#${r.rank} · ${esc(r.slug)} · ${esc(r.category || 'uncategorised')} · ${esc(r.chains.join(', ') || '—')}</div>
-    <dl class="model">
-      <dt>implied value</dt><dd>${fmtUSD(r.implied_value_usd)}</dd>
-      <dt>TVL</dt><dd>${fmtUSD(r.tvl_usd)}</dd>
-      <dt>7d change</dt><dd>${fmtPct(r.change_7d)}</dd>
-      <dt>age (listed)</dt><dd>${r.age_days === null ? 'unknown' : r.age_days + ' days'}</dd>
-      <dt>minimum capital</dt><dd>${fmtUSD(r.cost_usd)}</dd>
-      <dt>hold</dt><dd>${r.hours} hours</dd>
-      <dt>cost per hour</dt><dd>$${r.cost_per_hour_usd.toFixed(2)}</dd>
-    </dl>
-    <p>${esc(r.rationale)}</p>
-    ${liveNote}
-    <h3>Farm plan</h3>
-    <ol class="steps">${r.farm_steps.map((s) => `<li>${esc(s)}</li>`).join('')}</ol>`;
-}
+  function cellClass(value) {
+    return value === null || value === undefined ? '' : value > 0 ? 'up' : value < 0 ? 'down' : '';
+  }
 
-function renderLive() {
-  $('count').textContent = `${R.live.length} live-token protocols by market cap`;
-  $('detail').innerHTML = '<p class="muted">These already trade; their value is the market’s own, not the model’s.</p>';
-  const body = $('grid').querySelector('tbody');
-  body.innerHTML = R.live.map((l) => `<tr>
-    <td class="muted">·</td>
-    <td><div class="name">${esc(l.name)}</div><div class="slug">${esc(l.slug)}</div></td>
-    <td class="sector">${esc(l.category || '—')}</td>
-    <td class="chains">${esc(l.chains.slice(0, 3).join(', ') || '—')}</td>
-    <td class="r">${fmtUSD(l.tvl_usd)}</td>
-    <td class="r ${l.change_7d === null ? 'flat' : l.change_7d > 0.5 ? 'up' : l.change_7d < -0.5 ? 'down' : 'flat'}">${fmtPct(l.change_7d)}</td>
-    <td class="r">listed</td>
-    <td class="r iv">${fmtUSD(l.mcap_usd)}</td>
-  </tr>`).join('');
-  for (const tr of body.querySelectorAll('tr')) tr.style.cursor = 'default';
-}
+  function renderBoard() {
+    var rows = filterSort(radar.rows, {
+      sector: sectorEl.value,
+      query: searchEl.value,
+      sort: sortEl.value,
+      watchlistOnly: watchEl.checked,
+    });
+    countEl.textContent = rows.length + ' of ' + radar.rows.length + ' rows';
+    if (rows.length === 0) {
+      body.innerHTML = '<tr><td colspan="8">No matching protocol.</td></tr>';
+    } else {
+      body.innerHTML = rows.map(function (r) {
+        var change = r.change_7d;
+        return '<tr tabindex="0" data-slug="' + esc(r.slug) + '"' +
+          (r.watchlisted ? ' class="watch"' : '') +
+          (r.slug === selected ? ' class="selected"' : '') + '>' +
+          '<td class="num">' + r.rank + '</td>' +
+          '<td><span class="name">' + esc(r.name) + '</span><br><span class="slug">' + esc(r.slug) + '</span></td>' +
+          '<td>' + esc(r.category || '—') + '</td>' +
+          '<td>' + esc((r.chains || []).join(', ')) + '</td>' +
+          '<td class="num">' + esc(fmtUSD(r.tvl_usd)) + '</td>' +
+          '<td class="num ' + cellClass(change) + '">' + esc(fmtPct(change)) + '</td>' +
+          '<td class="num">' + (r.age_days === null ? '—' : r.age_days + 'd') + '</td>' +
+          '<td class="num value">' + esc(fmtUSD(r.implied_value_usd)) + '</td></tr>';
+      }).join('');
+    }
+    if (rows.length > 0 && rows.some(function (r) { return r.slug === selected; })) {
+      renderDetail(rows.filter(function (r) { return r.slug === selected; })[0]);
+    } else if (rows.length > 0) {
+      selected = rows[0].slug;
+      renderDetail(rows[0]);
+    } else {
+      detail.innerHTML = '<h2>No selection</h2><p class="note">Adjust the filters to see a protocol.</p>';
+    }
+  }
 
-function renderCoverage() {
-  const c = R.coverage;
-  $('count').textContent = `${c.protocols_total} protocols: every slug classified once`;
-  $('detail').innerHTML = `<h2>Coverage manifest</h2>
-    <p class="muted">The board ranks only pre-token protocols. Live tokens and derived products are held in separate ledgers so none of the 758 snapshot rows is silently dropped.</p>
-    <dl class="model">
-      <dt>board (pre-token)</dt><dd>${c.board_count}</dd>
-      <dt>watchlist on board</dt><dd>${c.watchlist_on_board}/${c.watchlist_count}</dd>
-      <dt>live token ledger</dt><dd>${c.live_count}</dd>
-      <dt>excluded with reason</dt><dd>${c.excluded_count}</dd>
-    </dl>
-    <h3>Exclusion reasons</h3>
-    <ol class="steps">${c.excluded_reasons.slice(0, 12).map((x) => `<li>${esc(x.slug)} — ${esc(x.reason)}</li>`).join('')}</ol>`;
-  const body = $('grid').querySelector('tbody');
-  body.innerHTML = c.excluded_reasons.map((x, i) => `<tr>
-    <td class="muted">${i + 1}</td>
-    <td><div class="name">${esc(x.slug)}</div></td>
-    <td colspan="4">${esc(x.reason)}</td>
-    <td class="r">excluded</td>
-  </tr>`).join('');
-  for (const tr of body.querySelectorAll('tr')) tr.style.cursor = 'default';
-}
+  function chip(label, value) {
+    return '<div class="chip"><span>' + esc(label) + '</span><strong>' + esc(value) + '</strong></div>';
+  }
 
-init();
+  function pair(label, value) {
+    return '<div><span>' + esc(label) + '</span><b>' + esc(value) + '</b></div>';
+  }
+
+  function renderDetail(r) {
+    var e = r.evidence;
+    var hold = Math.round((r.hours - 3) / 24);
+    var chips = [
+      chip('Implied value', fmtUSD(r.implied_value_usd)),
+      chip('TVL', fmtUSD(r.tvl_usd)),
+      chip('7d change', fmtPct(r.change_7d)),
+      chip('Age', r.age_days === null ? 'unknown' : r.age_days + ' days'),
+      chip('Min capital', '$' + minCapital(r.tvl_usd)),
+      chip('Hold', hold + ' days'),
+      chip('Cost / hour', '$' + Number(r.cost_per_hour_usd).toFixed(2)),
+      chip('Fitted log10', Number(e.predicted_log10_mcap).toFixed(4)),
+    ].join('');
+    var steps = r.farm_steps.map(function (s) { return '<li>' + esc(s) + '</li>'; }).join('');
+    detail.innerHTML =
+      '<h2><span class="rank">#' + r.rank + '</span>' + esc(r.slug) + '</h2>' +
+      '<p class="note">' + esc(r.name) + ' · ' + esc(r.category || 'unclassified') +
+      ' · ' + esc((r.chains || []).join(', ')) + '</p>' +
+      '<div class="chips">' + chips + '</div>' +
+      '<h3>Why this value</h3><p>' + esc(r.rationale) + '</p>' +
+      '<p class="note">' + esc(fmtUSD(e.tvl_usd)) + ' TVL · ' +
+      esc(e.sector_prior.toFixed(2)) + 'x sector prior · ' + e.comparable_count +
+      ' comparable labelled tokens · median ' + esc(fmtUSD(e.comparable_median_mcap_usd)) + '</p>' +
+      '<h3>Model check</h3><div class="panel">' +
+      pair('Method', v.method) +
+      pair('Labelled / used', v.labelled + ' / ' + v.used) +
+      pair('Kept terms', v.kept_terms.join(', ') || 'none') +
+      pair('Dropped terms', v.dropped_terms.join(', ') || 'none') +
+      pair('Hold-out LOO MAE', v.loo_mae_log10.toFixed(6)) +
+      pair('Walk-forward MAE', v.walk_mae_log10.toFixed(6)) +
+      pair('Baseline LOO MAE', v.baseline_mae_log10.toFixed(6)) +
+      pair('Intercept / logTVl', v.intercept.toFixed(6) + ' / ' + v.coef_log_tvl.toFixed(6)) +
+      '</div>' +
+      '<h3>Farm plan · ' + esc(fmtUSD(r.cost_usd)) + ' all-in over ' + r.hours + ' hours</h3>' +
+      '<ol class="steps">' + steps + '</ol>';
+  }
+
+  sortEl.addEventListener('change', renderBoard);
+  sectorEl.addEventListener('change', renderBoard);
+  watchEl.addEventListener('change', renderBoard);
+  searchEl.addEventListener('input', renderBoard);
+  body.addEventListener('click', function (event) {
+    var row = event.target.closest('tr[data-slug]');
+    if (row) { selected = row.getAttribute('data-slug'); renderBoard(); }
+  });
+  body.addEventListener('keydown', function (event) {
+    if (event.key !== 'Enter') return;
+    var row = event.target.closest('tr[data-slug]');
+    if (row) { selected = row.getAttribute('data-slug'); renderBoard(); }
+  });
+  renderBoard();
+}());

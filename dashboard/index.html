@@ -1,56 +1,71 @@
 <!doctype html>
 <html lang="en">
 <head>
-<meta charset="utf-8">
-<meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Token Launch Radar — pre-token board</title>
-<link rel="stylesheet" href="app.css">
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Token Launch Radar · radar-3-fitted</title>
+  <link rel="stylesheet" href="app.css">
 </head>
 <body>
-<header class="top">
-  <div class="brand">
-    <h1>Token Launch Radar</h1>
-    <p class="sub">Protocols with no token yet, ranked by an implied value from their own on-chain record.</p>
-  </div>
-  <dl class="stats" id="stats"></dl>
-</header>
+  <header class="topbar">
+    <div class="brand">
+      <span class="mark" aria-hidden="true">◎</span>
+      <div>
+        <h1>Token Launch Radar</h1>
+        <p id="subtitle">Loading snapshot…</p>
+      </div>
+    </div>
+    <div class="badges">
+      <span class="badge" id="model-badge">radar-3-fitted</span>
+      <span class="badge quiet" id="asof-badge">—</span>
+    </div>
+  </header>
 
-<nav class="tabs">
-  <button class="tab active" data-tab="board">Pre-token board</button>
-  <button class="tab" data-tab="live">Live tokens</button>
-  <button class="tab" data-tab="coverage">Coverage</button>
-</nav>
+  <main>
+    <section class="controls" aria-label="Sort and filter">
+      <label>Sort:
+        <select id="sort">
+          <option value="implied" selected>implied value ▾</option>
+          <option value="tvl">TVL ▾</option>
+          <option value="change">7d change ▾</option>
+          <option value="age">age ▾</option>
+          <option value="name">name ▾</option>
+          <option value="rank">rank ▾</option>
+        </select>
+      </label>
+      <label>Filter:
+        <select id="sector"><option value="">All sectors ▾</option></select>
+      </label>
+      <label class="check"><input type="checkbox" id="watchlist"> Watchlist only</label>
+      <label class="search">Search:
+        <input id="search" type="search" placeholder="protocol, slug or chain" autocomplete="off">
+      </label>
+      <span class="count" id="count">0 rows</span>
+    </section>
 
-<section class="panel" id="controls">
-  <input id="q" type="search" placeholder="Filter by name, slug or chain" aria-label="filter">
-  <select id="sector" aria-label="sector"></select>
-  <select id="sort" aria-label="sort">
-    <option value="rank">Sort: rank</option>
-    <option value="implied_value_usd">Sort: implied value</option>
-    <option value="tvl_usd">Sort: TVL</option>
-    <option value="change_7d">Sort: 7d change</option>
-    <option value="age_days">Sort: age</option>
-  </select>
-  <label class="check"><input type="checkbox" id="only-watch"> watchlist only</label>
-  <span class="count" id="count"></span>
-</section>
+    <div class="layout">
+      <section class="board" aria-label="Ranked pre-token board">
+        <table>
+          <thead>
+            <tr>
+              <th class="num">#</th><th>Protocol</th><th>Sector</th><th>Chains</th>
+              <th class="num">TVL</th><th class="num">7d</th><th class="num">Age</th>
+              <th class="num">Implied value</th>
+            </tr>
+          </thead>
+          <tbody id="board-body"></tbody>
+        </table>
+        <div class="footer" id="board-footer"></div>
+      </section>
 
-<main>
-  <div class="scroller">
-    <table id="grid">
-      <thead><tr>
-        <th>#</th><th class="l">Protocol</th><th>Sector</th><th>Chains</th>
-        <th class="r">TVL</th><th class="r">7d</th><th class="r">Age</th><th class="r">Implied value</th>
-      </tr></thead>
-      <tbody></tbody>
-    </table>
-  </div>
-  <aside class="detail" id="detail"><p class="muted">Pick a row to read its value model and farm plan.</p></aside>
-</main>
+      <aside class="detail" id="detail" aria-live="polite"></aside>
+    </div>
+  </main>
 
-<footer class="foot" id="foot"></footer>
-<script src="../data.js"></script>
-<script src="model.js"></script>
-<script src="app.js"></script>
+  <!-- data.js is emitted next to this page in the output bundle; ../data.js is the local fallback. -->
+  <script src="data.js"></script>
+  <script src="../data.js"></script>
+  <script src="model.js"></script>
+  <script src="app.js"></script>
 </body>
 </html>

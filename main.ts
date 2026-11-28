@@ -1,3 +1,4 @@
+// v4: screenshots regenerated from the current board with consistent farm plans.
 // Token launch radar entrypoint (Node 22, standard library only).
 //
 // Reads the sealed snapshot (--input <file|dir>, default /input), scores every protocol that has no token

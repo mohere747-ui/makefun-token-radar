@@ -1,34 +1,52 @@
-// Value model — read by the judge as part of the dashboard source.
-//
-// The snapshot labels 128 protocols with a nonzero token market cap. Those labels are the only
-// ground truth the sealed input carries. This dashboard fits log10(mcap) on log10(TVL) and keeps
-// an extra term only when it improves BOTH blind checks:
-//   1. leave-one-out: fit on 127 labelled tokens, predict the held-out one, 128 times;
-//   2. walk-forward: fit on the older 70% by listed age, predict the newest 30%.
-// Terms offered: growth (7d TVL change), age (days since listing), chains (breadth), sector
-// (category prior). A term that helps one check but hurts the other is dropped, not averaged.
-// The final fit prices the 198 pre-token rows. Live tokens keep the market's own value and are
-// never mixed into the ranking; derived products are listed with an exclusion reason so all
-// 758 snapshot protocols are accounted for exactly once.
+/* Small formatting and filter helpers; classic script, no modules, no dependencies. */
+function fmtUSD(value) {
+  if (value === null || value === undefined || !isFinite(Number(value))) return '—';
+  const n = Number(value);
+  const abs = Math.abs(n);
+  if (abs >= 1e9) return '$' + (n / 1e9).toFixed(2) + 'B';
+  if (abs >= 1e6) return '$' + (n / 1e6).toFixed(2) + 'M';
+  if (abs >= 1e3) return '$' + (n / 1e3).toFixed(1) + 'K';
+  return '$' + n.toFixed(0);
+}
 
-(function explainModel() {
-  const R = window.RADAR;
-  if (!R || !R.validation) return;
-  const v = R.validation;
-  window.RADAR_MODEL_NOTE = {
-    fitted_terms: v.fitted_terms,
-    kept: v.kept_terms,
-    dropped: v.dropped_terms,
-    baseline_log10_mae: v.baseline_mae_log10,
-    leave_one_out_log10_mae: v.loo_mae_log10,
-    walk_forward_log10_mae: v.walk_mae_log10,
-    rule: 'keep a term only when both blind errors fall; otherwise drop it',
-    value_of: function (row) {
-      // Reconstruct the same prediction for a row from its published evidence.
-      const e = row.evidence;
-      let logValue = v.intercept + v.coef_log_tvl * Math.log10(e.tvl_usd + 1);
-      for (let i = 0; i < v.kept_terms.length; i++) logValue += v.term_coef[i] * e.features[i + 2];
-      return Math.round(Math.pow(10, logValue));
-    },
-  };
-})();
+function fmtPct(value) {
+  if (value === null || value === undefined || !isFinite(Number(value))) return '—';
+  const n = Number(value);
+  return (n > 0 ? '+' : '') + n.toFixed(2) + '%';
+}
+
+function esc(value) {
+  return String(value === null || value === undefined ? '' : value)
+    .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;').replace(/'/g, '&#39;');
+}
+
+/** Filter then sort a copy of the board. Every comparison has a slug tie-break. */
+function filterSort(rows, options) {
+  const o = options || {};
+  const sector = o.sector || '';
+  const query = String(o.query || '').trim().toLowerCase();
+  const watchlistOnly = Boolean(o.watchlistOnly);
+  const sort = o.sort || 'implied';
+  const bySlug = (a, b) => (a.slug < b.slug ? -1 : a.slug > b.slug ? 1 : 0);
+  const result = (rows || []).filter((row) => {
+    if (sector && row.category !== sector) return false;
+    if (watchlistOnly && !row.watchlisted) return false;
+    if (!query) return true;
+    const haystack = [row.name, row.slug, row.category, (row.chains || []).join(' ')].join(' ').toLowerCase();
+    return haystack.indexOf(query) !== -1;
+  });
+  const key = {
+    implied: (r) => -r.implied_value_usd,
+    tvl: (r) => -r.tvl_usd,
+    change: (r) => -(r.change_7d || 0),
+    age: (r) => (r.age_days === null ? 1e9 : r.age_days),
+    name: (r) => r.name.toLowerCase(),
+    rank: (r) => r.rank,
+  }[sort] || ((r) => -r.implied_value_usd);
+  return result.sort((a, b) => {
+    const ka = key(a);
+    const kb = key(b);
+    return ka < kb ? -1 : ka > kb ? 1 : bySlug(a, b);
+  });
+}
